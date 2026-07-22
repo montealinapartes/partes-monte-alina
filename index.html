@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Partes Trabajo Montealina</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>Partes Trabajo Montealina</h1>
+</header>
+
+<main>
+<section class="card">
+  <h2>Acceso</h2>
+  <p class="muted">Claves iniciales: encargado = <b>encargado</b>, administrador = <b>admin</b>.</p>
+  <div class="row">
+    <select id="perfil"><option value="encargado">Encargado</option><option value="admin">Administrador</option></select>
+    <input id="clave" type="password" placeholder="Clave">
+    <button onclick="login()">Entrar</button>
+    <button class="secondary" onclick="logout()">Salir</button>
+    <span id="user" class="pill">Sin sesión</span>
+  </div>
+  <div id="loginMsg"></div>
+</section>
+
+<section class="card">
+  <h2>Filtros</h2>
+  <div class="row">
+    <label>Desde <input type="date" id="desde"></label>
+    <label>Hasta <input type="date" id="hasta"></label>
+    <label class="adminOnly hidden">Empleado <select id="filtroEmp"></select></label>
+    <button class="secondary" onclick="loadAll()">Actualizar datos</button>
+    <span id="syncState" class="pill">Sin cargar</span>
+  </div>
+</section>
+
+<section class="card">
+  <div class="tabs">
+    <button class="active" onclick="tab('partes',this)">Partes</button>
+    <button class="adminOnly hidden" onclick="tab('dash',this)">Dashboard</button>
+    <button class="adminOnly hidden" onclick="tab('inf',this)">Informes Excel</button>
+    <button class="adminOnly hidden" onclick="tab('val',this)">Validaciones</button><button onclick="tab('extras',this)">Revisar extras</button><button onclick="tab('ordinarias',this)">Revisar ordinarias</button>
+    <button class="adminOnly hidden" onclick="tab('bak',this)">Copias</button>
+  </div>
+</section>
+
+<section class="card adminOnly hidden" id="admin">
+  <h2>Administración empleados</h2>
+  <p class="muted">La revisión solo exige partes entre la fecha de alta y la fecha de baja. Una fecha de baja vacía significa que el empleado continúa en plantilla.</p>
+  <div class="row">
+    <input id="newEmp" placeholder="Nuevo empleado">
+    <label>Fecha de alta <input id="newEmpAlta" type="date"></label>
+    <button onclick="addEmp()">Añadir empleado</button>
+  </div>
+  <div id="empList"></div>
+</section>
+
+<section id="partes">
+  <section class="card">
+    <div class="tabs subTabs">
+      <button id="tabEditando" class="active" onclick="subtabPartes('editando',this)">Parte en edición</button>
+      <button id="tabGuardados" onclick="subtabPartes('guardados',this)">Partes ya rellenos</button>
+    </div>
+  </section>
+
+  <section id="partesEditando" class="card">
+    <div class="partesTop">
+      <button class="big" onclick="addRow()">➕ Añadir parte</button>
+    </div>
+    <p class="muted">Al entrar no se abre ningún parte ya guardado. El control solo exige partes durante el periodo de alta de cada empleado.</p>
+    <div id="editCards" class="partesGrid"></div>
+  </section>
+
+  <section id="partesGuardados" class="card hidden">
+    <p class="muted">Aquí están los partes ya guardados en el rango de fechas. Pulsa <b>Editar</b> para cambiar uno.</p>
+    <div id="controlPartes"></div>
+    <div id="progresoDia"></div>
+    <h2>Partes ya rellenos</h2>
+    <div id="savedCards" class="partesGrid"></div>
+  </section>
+</section>
+
+<section id="dash" class="hidden">
+  <section class="card">
+    <h2>Dashboard oficina</h2>
+    <div class="stats">
+      <div class="stat">Empleados<b id="dEmp">0</b></div>
+      <div class="stat">Ordinarias<b id="dOrd">0</b></div>
+      <div class="stat">Peligrosidad<b id="dPel">0</b></div>
+      <div class="stat">Extras<b id="dExt">0</b></div>
+      <div class="stat">Total<b id="dTot">0</b></div>
+    </div>
+  </section>
+  <section class="grid2">
+    <div class="card"><h2>Horas por empleado</h2><div id="cEmp"></div></div>
+    <div class="card"><h2>Horas por zona</h2><div id="cZona"></div></div>
+    <div class="card"><h2>Horas por trabajo</h2><div id="cTrab"></div></div>
+    <div class="card"><h2>Horas por subtipo</h2><div id="cSub"></div></div>
+  </section>
+</section>
+
+<section id="inf" class="hidden">
+  <section class="card">
+    <h2>Informes y Excel</h2>
+    <div class="row">
+      <button onclick="xlsx()">Excel profesional .xlsx</button>
+      <button class="secondary" onclick="csvNomina()">Nómina CSV</button>
+      <button class="secondary" onclick="csvDetalle()">Detalle CSV</button>
+      <button class="secondary" onclick="csvEmpleados()">Empleados CSV</button>
+      <button class="secondary" onclick="csvTrabajos()">Trabajos CSV</button>
+      <button class="secondary" onclick="csvZonas()">Zonas CSV</button>
+    </div>
+  </section>
+  <section class="card">
+    <h2>Resumen nómina</h2>
+    <div class="wrap"><table><thead><tr><th>Empleado</th><th>Ordinarias</th><th>Peligrosidad</th><th>Extras</th><th>Total</th></tr></thead><tbody id="nomina"></tbody></table></div>
+  </section>
+</section>
+
+<section id="val" class="hidden">
+  <section class="grid2">
+    <div class="card"><h2>Control 7,5 h</h2><div id="control"></div></div>
+    <div class="card"><h2>Registros incompletos</h2><div id="incomp"></div></div>
+  </section>
+</section>
+
+
+<section id="extras" class="hidden">
+  <section class="card">
+    <h2>Revisar horas extras por empleado</h2>
+    <p class="muted">Las horas extras van separadas de las ordinarias. Usa esta pantalla para comprobar si están todas las extras metidas por empleado.</p>
+    <div class="row">
+      <label>Empleado <select id="revEmp" onchange="renderRevisionExtras()"></select></label>
+      <label>Desde <input type="date" id="revDesde" onchange="renderRevisionExtras()"></label>
+      <label>Hasta <input type="date" id="revHasta" onchange="renderRevisionExtras()"></label>
+      <button class="secondary" onclick="revDesde.value=desde.value;revHasta.value=hasta.value;renderRevisionExtras()">Usar fechas generales</button>
+    </div>
+    <div id="revResumen"></div>
+  </section>
+  <section class="card">
+    <h2>Partes con horas extras</h2>
+    <div class="wrap">
+      <table>
+        <thead>
+          <tr><th>Fecha</th><th>Empleado</th><th>Zona</th><th>Tipo trabajo</th><th>Subtipo</th><th>Extras</th><th>Ordinarias</th><th>Acción</th></tr>
+        </thead>
+        <tbody id="revTabla"></tbody>
+      </table>
+    </div>
+  </section>
+</section>
+
+
+<section id="ordinarias" class="hidden">
+  <section class="card">
+    <h2>Revisar horas ordinarias por empleado</h2>
+    <p class="muted">Comprueba por empleado y fechas si cada día laborable suma 7,50 horas ordinarias. Se excluyen sábados, domingos y festivos.</p>
+    <div class="row">
+      <label>Empleado <select id="ordEmp" onchange="renderRevisionOrdinarias()"></select></label>
+      <label>Desde <input type="date" id="ordDesde" onchange="renderRevisionOrdinarias()"></label>
+      <label>Hasta <input type="date" id="ordHasta" onchange="renderRevisionOrdinarias()"></label>
+      <button class="secondary" onclick="ordDesde.value=desde.value;ordHasta.value=hasta.value;renderRevisionOrdinarias()">Usar fechas generales</button>
+    </div>
+    <div id="ordResumen"></div>
+  </section>
+  <section class="card">
+    <h2>Detalle ordinarias</h2>
+    <div class="wrap">
+      <table>
+        <thead>
+          <tr><th>Fecha</th><th>Empleado</th><th>Ordinarias</th><th>Estado</th><th>Partes</th><th>Acciones</th></tr>
+        </thead>
+        <tbody id="ordTabla"></tbody>
+      </table>
+    </div>
+  </section>
+</section>
+
+<section id="bak" class="hidden">
+  <section class="card"><h2>Copias de seguridad</h2><button onclick="backup()">Exportar JSON</button><div id="bakMsg"></div></section>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
