@@ -1,0 +1,9 @@
+PARTES MONTE ALINA v6.10.29
+
+Corrección verificada del cierre del día:
+- Se elimina la detección por «último empleado».
+- Después de guardar, se recalculan las horas acumuladas de todos los empleados aplicables a esa fecha.
+- Si algún empleado está por debajo de 7,50 h, se mantiene la fecha y se selecciona el primer pendiente.
+- Solo cuando todos alcanzan 7,50 h se pasa al siguiente día laborable.
+- Al cambiar de día se selecciona el primer empleado del nuevo día.
+- No se modifica el avance normal entre empleados ni Situación/Tipo de zona.
