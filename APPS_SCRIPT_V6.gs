@@ -103,14 +103,24 @@ function guardarParte(parte) {
   parte.Extras = redondearMediaHora(parte.Extras);
   if (horasPositivas(parte.Extras)) parte.Ordinarias = "0,00";
 
+  const idCol = headers.indexOf("ID");
+  if (idCol === -1) throw new Error("No se encuentra la columna ID en Partes.");
+
   let rowIndex = -1;
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === String(parte.ID)) { rowIndex = i + 1; break; }
+    if (String(data[i][idCol]).trim() === String(parte.ID).trim()) {
+      rowIndex = i + 1;
+      break;
+    }
   }
+
   const row = headers.map(h => parte[h] ?? "");
-  if (rowIndex > -1) sh.getRange(rowIndex, 1, 1, row.length).setValues([row]);
-  else sh.appendRow(row);
-  return { ok: true, parte };
+  if (rowIndex > -1) {
+    sh.getRange(rowIndex, 1, 1, row.length).setValues([row]);
+  } else {
+    sh.appendRow(row);
+  }
+  return { ok: true, parte, actualizado: rowIndex > -1 };
 }
 
 function eliminarParte(id) {

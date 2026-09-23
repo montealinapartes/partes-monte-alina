@@ -207,7 +207,6 @@ async function loadAll(){
   partesTodas=(j.partes||[]).map(normalizarParte);
   partes=partesTodas.filter(r=>!r.Fecha||(r.Fecha>=desde.value&&r.Fecha<=hasta.value));
   if(editingId && !partes.find(p=>p.ID===editingId)) editingId=null;
-  if(editingId && !String(editingId).startsWith("tmp_")) editingId=null;
   setBusy(false,"Datos actualizados");
   render();
  }catch(e){setBusy(false,"Error");msg("loginMsg",e.message,false)}
@@ -427,28 +426,74 @@ function validarParte(p){
  return "";
 }
 
+function actualizarParteLocal(parteGuardado){
+ let limpio=normalizarParte(Object.assign({},parteGuardado));
+ delete limpio._dirty;
+ delete limpio._new;
+
+ let iTodas=partesTodas.findIndex(x=>String(x.ID)===String(limpio.ID));
+ if(iTodas>=0) partesTodas[iTodas]=limpio;
+ else partesTodas.unshift(limpio);
+
+ let visible=!limpio.Fecha || (limpio.Fecha>=desde.value && limpio.Fecha<=hasta.value);
+ let i=partes.findIndex(x=>String(x.ID)===String(limpio.ID));
+ if(visible){
+   if(i>=0) partes[i]=limpio;
+   else partes.unshift(limpio);
+ }else if(i>=0){
+   partes.splice(i,1);
+ }
+ return limpio;
+}
+
 async function savePart(id){
  let p=partes.find(x=>x.ID===id); if(!p)return;
  aplicarReglaSituacion(p);
  if(p.Situacion==="Trabajo")aplicarReglaExtras(p);
  let err=validarParte(p); if(err)return alert(err);
 
+ const eraNuevo=String(p.ID||"").startsWith("tmp_");
+ const idOriginal=p.ID;
  let fechaGuardada=p.Fecha || today();
  if(fechaGuardada)localStorage.ultimaFechaParte=fechaGuardada;
 
  try{
-  setBusy(true,"Guardando parte...");
+  setBusy(true,eraNuevo?"Guardando parte...":"Actualizando parte...");
   const payload=Object.assign({},p);
   delete payload._dirty;
   delete payload._new;
-  if(String(payload.ID).startsWith("tmp_"))delete payload.ID;
+
+  // Solo los partes realmente nuevos se envían sin ID.
+  // Al editar, el ID original se conserva para que Apps Script actualice la misma fila.
+  if(eraNuevo) delete payload.ID;
+  else payload.ID=idOriginal;
 
   let res=await api({accion:"guardarParte",parte:payload});
   let parteGuardado=Object.assign({},payload,res.parte||{});
+  if(!parteGuardado.ID) throw new Error("El servidor no devolvió el ID del parte guardado.");
+
+  // Sustituimos el borrador temporal o la versión editada en memoria.
+  if(eraNuevo){
+    partes=partes.filter(x=>x.ID!==idOriginal);
+  }
+  parteGuardado=actualizarParteLocal(parteGuardado);
+
+  if(!eraNuevo){
+    // Al editar un parte existente no se crea otro parte en blanco ni otra fila.
+    editingId=null;
+    partesSubtab="guardados";
+    document.getElementById("partesEditando").classList.add("hidden");
+    document.getElementById("partesGuardados").classList.remove("hidden");
+    document.querySelectorAll(".subTabs button").forEach(x=>x.classList.remove("active"));
+    let guardadosBtn=document.querySelector(".subTabs button:nth-child(2)");
+    if(guardadosBtn)guardadosBtn.classList.add("active");
+    setBusy(false,"Parte actualizado");
+    msg("loginMsg","Parte actualizado correctamente.",true);
+    render();
+    return;
+  }
+
   let diaCompleto=estadoCompletoConParteGuardado(fechaGuardada,parteGuardado);
-
-  await loadAll();
-
   let fechaNuevo=diaCompleto?siguienteDiaLaborable(fechaGuardada):fechaGuardada;
   localStorage.ultimaFechaParte=fechaNuevo;
 
@@ -761,7 +806,7 @@ function empleadosOrdenados(fecha){
  return [...base,...nuevos].map(x=>x.nombre);
 }
 function totalOrdinariasEmpleadoFecha(nombre,fecha,excluirId=""){
- return partes.filter(p=>p.Empleado===nombre&&p.Fecha===fecha&&p.ID!==excluirId)
+ return partesTodas.filter(p=>p.Empleado===nombre&&p.Fecha===fecha&&p.ID!==excluirId)
    .reduce((acc,p)=>acc+n(p.Ordinarias),0);
 }
 function trabajadorPendiente(fecha,excluirId=""){
@@ -783,8 +828,8 @@ function estadoTrabajadoresDia(fecha){
 
 function estadoCompletoConParteGuardado(fecha,parteGuardado){
  let nombres=empleadosOrdenados(fecha);
- return nombres.every(nombre=>{
-   let total=partes
+ return nombres.length>0 && nombres.every(nombre=>{
+   let total=partesTodas
      .filter(p=>p.Fecha===fecha && p.Empleado===nombre && p.ID!==parteGuardado.ID)
      .reduce((acc,p)=>acc+n(p.Ordinarias),0);
 
@@ -959,7 +1004,7 @@ function csvTrabajos(){dlcsv("resumen_trabajos.csv",["J/M","Tipo","Subtipo","Reg
 function csvZonas(){dlcsv("resumen_zonas.csv",["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],groupRows(gZona()))}
 function csvNomina(){dlcsv("resumen_nomina.csv",["Empleado","Ordinarias","Peligrosidad","Extras","Total"],nom().map(v=>[v.empleado,m(v.ord),m(v.pel),m(v.ext),m(v.ord+v.pel+v.ext)]))}
 function xlsx(){if(typeof XLSX==="undefined")return alert("No se cargó la librería Excel.");let t=totals(),wb=XLSX.utils.book_new(),aoa=XLSX.utils.aoa_to_sheet;XLSX.utils.book_append_sheet(wb,aoa([["Resumen general"],["Desde",desde.value],["Hasta",hasta.value],["Empleados",t.emp],["Ordinarias",m(t.ord)],["Peligrosidad",m(t.pel)],["Extras",m(t.ext)],["Total",m(t.ord+t.pel+t.ext)]]),"Resumen General");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Ordinarias","Peligrosidad","Extras","Total"],...nom().map(v=>[v.empleado,+m(v.ord),+m(v.pel),+m(v.ext),+m(v.ord+v.pel+v.ext)])]),"Resumen Nomina");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gEmp())]),"Por Empleado");XLSX.utils.book_append_sheet(wb,aoa([["J/M","Tipo","Subtipo","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gTrab())]),"Por Trabajo");XLSX.utils.book_append_sheet(wb,aoa([["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gZona())]),"Por Zona");XLSX.utils.book_append_sheet(wb,aoa([HEAD,...rowsR().map(det)]),"Detalle");XLSX.writeFile(wb,`informe_partes_${desde.value}_${hasta.value}.xlsx`)}
-function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.24",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
+function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.25",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
 
 desde.addEventListener("change",()=>{localStorage.desde=desde.value;loadAll()});
 hasta.addEventListener("change",()=>{localStorage.hasta=hasta.value;loadAll()});

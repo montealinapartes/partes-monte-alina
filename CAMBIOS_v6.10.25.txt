@@ -1,0 +1,14 @@
+PARTES MONTE ALINA v6.10.25
+
+Correcciones:
+1. Al completar todos los empleados del día, abre automáticamente el siguiente día laborable.
+   El cálculo usa todos los partes cargados, no solo el filtro visible.
+2. Guardado más rápido en PC.
+   Tras guardar un parte ya no vuelve a descargar toda la base de datos.
+3. Editar un parte existente actualiza la misma fila.
+   Se conserva el ID y no se crea un parte nuevo.
+4. Caché de GitHub Pages mejorada para recibir las nuevas versiones.
+
+IMPORTANTE:
+- Sustituir también el Apps Script por APPS_SCRIPT_V6.gs de esta versión y volver a implementar.
+- Después subir los archivos web a GitHub sustituyendo los anteriores.
