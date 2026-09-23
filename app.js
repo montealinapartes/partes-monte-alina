@@ -525,17 +525,27 @@ async function savePart(id){
     return;
   }
 
-  // Después de incorporar el parte confirmado, buscamos el primer trabajador pendiente.
-  // Si no queda ninguno, el día está completo y avanzamos al siguiente laborable.
-  let estados=estadoTrabajadoresDia(fechaGuardada);
-  let pendiente=(estados.find(x=>!x.completo)||{}).nombre||"";
-  let diaCompleto=estados.length>0 && estados.every(x=>x.completo);
+  // Fin de día: la secuencia de empleados ya nos ha llevado hasta el último.
+  // Al guardar ese último empleado, avanzamos de forma explícita al siguiente
+  // día laborable y seleccionamos el primer empleado de ese nuevo día.
+  const ordenDia=empleadosOrdenados(fechaGuardada);
+  const ultimoEmpleado=ordenDia.length?ordenDia[ordenDia.length-1]:"";
+  const esUltimo=ultimoEmpleado!=="" &&
+    claveEmpleado(parteGuardado.Empleado)===claveEmpleado(ultimoEmpleado);
+
+  let pendiente=trabajadorPendiente(fechaGuardada);
+  let diaCompleto=esUltimo;
 
   let fechaNuevo=diaCompleto?siguienteDiaLaborable(fechaGuardada):fechaGuardada;
   localStorage.ultimaFechaParte=fechaNuevo;
 
   let nuevo=nuevoParteBlanco(fechaNuevo);
-  if(!diaCompleto && pendiente) nuevo.Empleado=pendiente;
+  if(diaCompleto){
+    const ordenNuevoDia=empleadosOrdenados(fechaNuevo);
+    nuevo.Empleado=ordenNuevoDia.length?ordenNuevoDia[0]:"";
+  }else if(pendiente){
+    nuevo.Empleado=pendiente;
+  }
 
   partes.unshift(nuevo);
   editingId=nuevo.ID;
@@ -1052,7 +1062,7 @@ function csvTrabajos(){dlcsv("resumen_trabajos.csv",["J/M","Tipo","Subtipo","Reg
 function csvZonas(){dlcsv("resumen_zonas.csv",["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],groupRows(gZona()))}
 function csvNomina(){dlcsv("resumen_nomina.csv",["Empleado","Ordinarias","Peligrosidad","Extras","Total"],nom().map(v=>[v.empleado,m(v.ord),m(v.pel),m(v.ext),m(v.ord+v.pel+v.ext)]))}
 function xlsx(){if(typeof XLSX==="undefined")return alert("No se cargó la librería Excel.");let t=totals(),wb=XLSX.utils.book_new(),aoa=XLSX.utils.aoa_to_sheet;XLSX.utils.book_append_sheet(wb,aoa([["Resumen general"],["Desde",desde.value],["Hasta",hasta.value],["Empleados",t.emp],["Ordinarias",m(t.ord)],["Peligrosidad",m(t.pel)],["Extras",m(t.ext)],["Total",m(t.ord+t.pel+t.ext)]]),"Resumen General");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Ordinarias","Peligrosidad","Extras","Total"],...nom().map(v=>[v.empleado,+m(v.ord),+m(v.pel),+m(v.ext),+m(v.ord+v.pel+v.ext)])]),"Resumen Nomina");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gEmp())]),"Por Empleado");XLSX.utils.book_append_sheet(wb,aoa([["J/M","Tipo","Subtipo","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gTrab())]),"Por Trabajo");XLSX.utils.book_append_sheet(wb,aoa([["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gZona())]),"Por Zona");XLSX.utils.book_append_sheet(wb,aoa([HEAD,...rowsR().map(det)]),"Detalle");XLSX.writeFile(wb,`informe_partes_${desde.value}_${hasta.value}.xlsx`)}
-function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.27",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
+function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.28",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
 
 desde.addEventListener("change",()=>{localStorage.desde=desde.value;loadAll()});
 hasta.addEventListener("change",()=>{localStorage.hasta=hasta.value;loadAll()});

@@ -1,0 +1,8 @@
+PARTES MONTE ALINA v6.10.28
+
+Corrección aislada del fin de día:
+- No se modifica el avance normal entre empleados.
+- Al guardar el último empleado del orden del día, cambia al siguiente día laborable.
+- El nuevo parte selecciona explícitamente el primer empleado del nuevo día.
+- Se mantienen las protecciones anti-duplicados y el control de espera de v6.10.27.
+- No se modifica la lógica de Situación / Tipo de zona en esta versión.
