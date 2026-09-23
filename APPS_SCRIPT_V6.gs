@@ -25,6 +25,7 @@ function doPost(e) {
 function ejecutarAccion(data) {
   const accion = data.accion;
   if (accion === "leerTodo") return leerTodo();
+  if (accion === "buscarPartePorId") return buscarPartePorId(data.id);
   if (accion === "guardarParte") return guardarParte(data.parte);
   if (accion === "eliminarParte") return eliminarParte(data.id);
   if (accion === "guardarEmpleado") return guardarEmpleado(data.empleado);
@@ -74,7 +75,7 @@ function asegurarHoja(ss, nombre, headers) {
 
 function leerTodo() {
   const ss = libro();
-  return { ok: true, version: "v6.10.32", empleados: leerHoja(ss, "Empleados"), partes: leerHoja(ss, "Partes") };
+  return { ok: true, version: "v6.10.33", empleados: leerHoja(ss, "Empleados"), partes: leerHoja(ss, "Partes") };
 }
 
 function leerHoja(ss, nombre) {
@@ -88,6 +89,23 @@ function leerHoja(ss, nombre) {
     headers.forEach((h, i) => obj[h] = row[i]);
     return obj;
   });
+}
+
+function buscarPartePorId(id) {
+  const sh = libro().getSheetByName("Partes");
+  if (!sh || !id) return { ok:true, encontrado:false, parte:null };
+  const lastCol = sh.getLastColumn();
+  const headers = sh.getRange(1,1,1,lastCol).getDisplayValues()[0].map(h=>String(h).trim());
+  const idCol = headers.indexOf("ID");
+  const lastRow = sh.getLastRow();
+  if (idCol < 0 || lastRow <= 1) return { ok:true, encontrado:false, parte:null };
+  const celda = sh.getRange(2,idCol+1,lastRow-1,1)
+    .createTextFinder(String(id).trim()).matchEntireCell(true).findNext();
+  if (!celda) return { ok:true, encontrado:false, parte:null };
+  const vals = sh.getRange(celda.getRow(),1,1,lastCol).getDisplayValues()[0];
+  const parte = {};
+  headers.forEach((h,i)=>parte[h]=vals[i]);
+  return { ok:true, encontrado:true, parte:parte };
 }
 
 function guardarParte(parte) {
