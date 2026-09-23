@@ -1,4 +1,4 @@
-const CACHE_NAME="partes-v6.10.25";
+const CACHE_NAME="partes-v6.10.26";
 const FILES=["./","./index.html","./styles.css","./app.js","./manifest.json","./icon.svg"];
 
 self.addEventListener("install",event=>{

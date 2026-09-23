@@ -1,0 +1,14 @@
+PARTES MONTE ALINA v6.10.26
+
+Corrección específica tras la prueba de v6.10.25:
+- Bloqueo contra dobles/triples pulsaciones de Guardar.
+- Cada parte nuevo recibe un ID estable antes de enviarse.
+- Apps Script usa LockService y el mismo ID para impedir duplicados por peticiones simultáneas.
+- Tras guardar, el siguiente empleado se calcula sobre el parte ya confirmado.
+- Si no queda ningún empleado pendiente, avanza al siguiente día laborable.
+- La edición conserva el ID y actualiza la misma fila.
+- Se mantiene el guardado rápido sin recargar toda la base tras cada parte.
+
+Primero actualizar y volver a implementar APPS_SCRIPT_V6.gs.
+Después sustituir los archivos web en GitHub.
+No actualizar Android hasta verificar esta versión en PC.

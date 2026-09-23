@@ -31,6 +31,7 @@ const SITS=["Trabajo","Baja","Vacaciones","Moscoso","Cursos","Hospitalización f
 const ZONAS={"A) COMUNES": ["01 Entrada", "02 Oficina de Gerencia/Administración", "03 Caseta de Vigilancia", "04 Sala de los vigilantes/conserjes", "05 Instalaciones mantenimiento/jardinería. Sólo almacén y cuartos mto-jardinería", "06 Depuradoras 1, 2 y3", "07 Parcela depósitos y grupo de presión+Pozos 1-4", "08 Parcela de la Central Térmica", "10 Pistas tenis y padel", "27 TODA LA URBANIZACIÓN"], "B) FASE I": ["11 Vial y mediana Avenida hasta transversal siete y transversal 1-7", "12 Vial Saliente hasta el 56", "13 Vial Poniente hasta el 76", "14 Zona verde Saliente", "15 Zona tira verde entre Transversal 2 y 3", "16 Zona H entre transversal 4 y 5 y tros Avda. 42", "17 Zona verde transversal 6", "18 Zona paso de la viga Monteclaro", "19 Instalación Central Térmica", "19 Bis Toda la fase I"], "C) FASE II": ["20 Vial y mediana Avda. desde Transv. 7 a 8", "21 Vial saliente desde el 64 hasta 124", "22 Vial Poniente desde el 78 al 188", "23 Plazas 1 a la 9 Zona Levitt", "24 Pasillo verde e intersticiales", "25 Rotonda Transversal Ocho", "26 Bosque de Boadilla", "26 Bis Toda la fase II"]};
 const TRAB={"Mantenimiento": {"01. Distribución, control y revision de los trabajos": ["A. Revisión, control y distribución de los trabajos"], "02. Red de agua": ["F. Inspección red agua y detección fugas de agua", "G. Reparación fugas de agua en red agua", "GGBis. Obra nueva acometida agua", "H. Control y supervisión de los pozos, depósitos, etc.", "I. Reparación armarios de agua, limpieza filtros, etc.", "K. Revisión y lectura contadores de agua"], "03. Electricidad": ["L. Cambio de bombillas del alumbrado público", "M. Pequeñas reparaciones, arreglo y pintura farolas", "N. Colaboración con empresa electricidad"], "04. Red de saneamiento": ["O. Inspección de la red de saneamiento y detección de atascos", "P. Limpieza y reparación de arquetas y rejillas", "Q. Supervisión y colaboración con servicio limpieza y desatranco"], "05. Desinsectación y desratización": ["R. Inspección y control de posibles plagas", "S. Acompañamiento y supervisión empresa plagas"], "06. Limpieza": ["T. Limpieza viales y aceras", "U. Limpieza plazas", "V. Limpieza jardinería"], "07. Pintura": ["Y. Pintura Señalización y vallados", "Z. Pintura instalaciones de la Comunidad"], "08. Reparación baches": ["AA. Reparación pequeños baches", "BB. Zanjas abiertas para la reparación de averias", "Bbbis. Reparación de aceras sin avería previa"], "09. Protección contraincendios": ["CC. Mantenimiento extintores", "DD. Mantenimiento bocas de incendio"], "10. Mantenimiento maquinaria, herramienta y vehículos": ["Mantenimiento herramienta, maquinaria y vehículos"], "11. Inspección herramientas": ["EE. Reparación vallados", "FF. Otras reparaciones", "FFbis. Reparaciones instalaciones Comunidad"], "12. Limpieza y poda temporal nieve": ["TT. Limpieza y poda temporal nieve"]}, "Jardinería": {"1. Riego": ["Riego"], "2. Siega": ["Siega"], "3. Desbroce": ["desbroce"], "4. Entrecavado/rastrillado": ["Entrecavado/rastrillado/recorte/perfilado"], "5. Poda": ["Poda"], "6. Plantaciones": ["Plantaciones"], "7. Jabalies": ["Jabalíes"], "8. Tratamientos fitosanitarios": ["Tratamientos fitosanitarios"], "9. Mantenimiento maquinaria jardineria": ["Mantenimiento maquinaria, herramienta y accesorios jard."]}};
 let emps=[], partes=[], partesTodas=[], rol=localStorage.rol||"", busy=false, editingId=null, partesSubtab="editando";
+const guardadosEnCurso=new Set();
 
 function today(){return new Date().toISOString().slice(0,10)}
 function month(){return today().slice(0,8)+"01"}
@@ -447,39 +448,43 @@ function actualizarParteLocal(parteGuardado){
 }
 
 async function savePart(id){
+ if(guardadosEnCurso.has(id))return;
  let p=partes.find(x=>x.ID===id); if(!p)return;
+
  aplicarReglaSituacion(p);
  if(p.Situacion==="Trabajo")aplicarReglaExtras(p);
  let err=validarParte(p); if(err)return alert(err);
 
  const eraNuevo=String(p.ID||"").startsWith("tmp_");
  const idOriginal=p.ID;
- let fechaGuardada=p.Fecha || today();
- if(fechaGuardada)localStorage.ultimaFechaParte=fechaGuardada;
+ const fechaGuardada=p.Fecha || today();
 
+ // Un ID estable para este parte hace que un reintento actualice el mismo registro.
+ if(eraNuevo && !p._saveId){
+   p._saveId=(window.crypto && crypto.randomUUID)
+     ? crypto.randomUUID()
+     : "parte_"+Date.now()+"_"+Math.random().toString(36).slice(2);
+ }
+
+ guardadosEnCurso.add(id);
  try{
   setBusy(true,eraNuevo?"Guardando parte...":"Actualizando parte...");
+
   const payload=Object.assign({},p);
   delete payload._dirty;
   delete payload._new;
-
-  // Solo los partes realmente nuevos se envían sin ID.
-  // Al editar, el ID original se conserva para que Apps Script actualice la misma fila.
-  if(eraNuevo) delete payload.ID;
-  else payload.ID=idOriginal;
+  delete payload._saveId;
+  payload.ID=eraNuevo?p._saveId:idOriginal;
 
   let res=await api({accion:"guardarParte",parte:payload});
   let parteGuardado=Object.assign({},payload,res.parte||{});
   if(!parteGuardado.ID) throw new Error("El servidor no devolvió el ID del parte guardado.");
 
-  // Sustituimos el borrador temporal o la versión editada en memoria.
-  if(eraNuevo){
-    partes=partes.filter(x=>x.ID!==idOriginal);
-  }
+  // El borrador temporal desaparece y queda exactamente el registro confirmado.
+  if(eraNuevo) partes=partes.filter(x=>x.ID!==idOriginal);
   parteGuardado=actualizarParteLocal(parteGuardado);
 
   if(!eraNuevo){
-    // Al editar un parte existente no se crea otro parte en blanco ni otra fila.
     editingId=null;
     partesSubtab="guardados";
     document.getElementById("partesEditando").classList.add("hidden");
@@ -493,11 +498,17 @@ async function savePart(id){
     return;
   }
 
-  let diaCompleto=estadoCompletoConParteGuardado(fechaGuardada,parteGuardado);
+  // Después de incorporar el parte confirmado, buscamos el primer trabajador pendiente.
+  // Si no queda ninguno, el día está completo y avanzamos al siguiente laborable.
+  let pendiente=trabajadorPendiente(fechaGuardada);
+  let diaCompleto=pendiente==="";
+
   let fechaNuevo=diaCompleto?siguienteDiaLaborable(fechaGuardada):fechaGuardada;
   localStorage.ultimaFechaParte=fechaNuevo;
 
   let nuevo=nuevoParteBlanco(fechaNuevo);
+  if(!diaCompleto && pendiente) nuevo.Empleado=pendiente;
+
   partes.unshift(nuevo);
   editingId=nuevo.ID;
   partesSubtab="editando";
@@ -508,18 +519,17 @@ async function savePart(id){
   document.getElementById("tabEditando").classList.add("active");
 
   setBusy(false,diaCompleto?"Día completado":"Parte guardado");
-
   if(diaCompleto){
     msg("loginMsg","Día completado. Se abre el siguiente día laborable: "+fechaNuevo,true);
   }else{
-    let sig=trabajadorPendiente(fechaGuardada);
-    msg("loginMsg","Parte guardado. Siguiente trabajador: "+(sig||"ninguno"),true);
+    msg("loginMsg","Parte guardado. Siguiente trabajador: "+pendiente,true);
   }
-
   render();
  }catch(e){
   setBusy(false,"Error");
   msg("loginMsg",e.message,false);
+ }finally{
+  guardadosEnCurso.delete(id);
  }
 }
 async function delRow(id){
@@ -1004,7 +1014,7 @@ function csvTrabajos(){dlcsv("resumen_trabajos.csv",["J/M","Tipo","Subtipo","Reg
 function csvZonas(){dlcsv("resumen_zonas.csv",["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],groupRows(gZona()))}
 function csvNomina(){dlcsv("resumen_nomina.csv",["Empleado","Ordinarias","Peligrosidad","Extras","Total"],nom().map(v=>[v.empleado,m(v.ord),m(v.pel),m(v.ext),m(v.ord+v.pel+v.ext)]))}
 function xlsx(){if(typeof XLSX==="undefined")return alert("No se cargó la librería Excel.");let t=totals(),wb=XLSX.utils.book_new(),aoa=XLSX.utils.aoa_to_sheet;XLSX.utils.book_append_sheet(wb,aoa([["Resumen general"],["Desde",desde.value],["Hasta",hasta.value],["Empleados",t.emp],["Ordinarias",m(t.ord)],["Peligrosidad",m(t.pel)],["Extras",m(t.ext)],["Total",m(t.ord+t.pel+t.ext)]]),"Resumen General");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Ordinarias","Peligrosidad","Extras","Total"],...nom().map(v=>[v.empleado,+m(v.ord),+m(v.pel),+m(v.ext),+m(v.ord+v.pel+v.ext)])]),"Resumen Nomina");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gEmp())]),"Por Empleado");XLSX.utils.book_append_sheet(wb,aoa([["J/M","Tipo","Subtipo","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gTrab())]),"Por Trabajo");XLSX.utils.book_append_sheet(wb,aoa([["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gZona())]),"Por Zona");XLSX.utils.book_append_sheet(wb,aoa([HEAD,...rowsR().map(det)]),"Detalle");XLSX.writeFile(wb,`informe_partes_${desde.value}_${hasta.value}.xlsx`)}
-function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.25",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
+function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.26",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
 
 desde.addEventListener("change",()=>{localStorage.desde=desde.value;loadAll()});
 hasta.addEventListener("change",()=>{localStorage.hasta=hasta.value;loadAll()});

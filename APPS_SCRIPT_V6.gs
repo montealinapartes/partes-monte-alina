@@ -75,7 +75,7 @@ function asegurarHoja(ss, nombre, headers) {
 
 function leerTodo() {
   const ss = libro();
-  return { ok: true, version: "v6.10.24", empleados: leerHoja(ss, "Empleados"), partes: leerHoja(ss, "Partes") };
+  return { ok: true, version: "v6.10.26", empleados: leerHoja(ss, "Empleados"), partes: leerHoja(ss, "Partes") };
 }
 
 function leerHoja(ss, nombre) {
@@ -92,6 +92,9 @@ function leerHoja(ss, nombre) {
 }
 
 function guardarParte(parte) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
   const ss = libro();
   const sh = ss.getSheetByName("Partes");
   const data = sh.getDataRange().getDisplayValues();
@@ -121,6 +124,9 @@ function guardarParte(parte) {
     sh.appendRow(row);
   }
   return { ok: true, parte, actualizado: rowIndex > -1 };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function eliminarParte(id) {
