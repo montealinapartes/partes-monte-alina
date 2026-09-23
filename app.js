@@ -137,41 +137,58 @@ function normalizarParte(r){
  return r;
 }
 
-function apiUnaVez(payload,timeoutMs=12000){
+function apiUnaVez(payload, timeoutMs=20000){
  return new Promise((resolve,reject)=>{
   const cb="cb_"+Date.now()+"_"+Math.random().toString(36).slice(2);
-  const script=document.createElement("script");
   let terminado=false;
+  let timer=null;
+  let script=null;
+
   const limpiar=()=>{
-    try{delete window[cb]}catch(_){}
-    if(script.parentNode)script.remove();
+   if(timer){ clearTimeout(timer); timer=null; }
+   if(script && script.parentNode) script.parentNode.removeChild(script);
+   script=null;
+   try{ delete window[cb]; }catch(_){ window[cb]=undefined; }
   };
-  const timer=setTimeout(()=>{
-    if(terminado)return;
-    terminado=true; limpiar();
-    reject(new Error("La conexión con Google Sheets está tardando demasiado."));
-  },timeoutMs);
-  window[cb]=(j)=>{
-    if(terminado)return;
-    terminado=true; clearTimeout(timer); limpiar();
-    if(!j.ok)reject(new Error(j.error||"Error API"));else resolve(j);
+
+  const finalizar=(ok,valor)=>{
+   if(terminado)return;
+   terminado=true;
+   limpiar();
+   ok?resolve(valor):reject(valor);
   };
-  script.onerror=()=>{
-    if(terminado)return;
-    terminado=true; clearTimeout(timer); limpiar();
-    reject(new Error("No se pudo conectar con Google Sheets"));
-  };
-  script.src=API+"?callback="+encodeURIComponent(cb)+"&payload="+encodeURIComponent(JSON.stringify(payload))+"&_t="+Date.now();
-  document.body.appendChild(script);
+
+  window[cb]=(data)=>finalizar(true,data);
+
+  const params=new URLSearchParams();
+  Object.entries(payload||{}).forEach(([k,v])=>{
+   params.set(k, typeof v==="object" ? JSON.stringify(v) : String(v));
+  });
+  params.set("callback",cb);
+  params.set("_t",String(Date.now()));
+
+  script=document.createElement("script");
+  script.async=true;
+  script.src=API_URL+"?"+params.toString();
+  script.onerror=()=>finalizar(false,new Error("No se pudo conectar con Google Sheets"));
+  document.head.appendChild(script);
+
+  timer=setTimeout(
+   ()=>finalizar(false,new Error("La conexión con Google Sheets está tardando demasiado.")),
+   timeoutMs
+  );
  });
 }
+
 async function api(payload){
+ // Una petición normal y un único reintento. Cada intento limpia por completo
+ // callback, temporizador y etiqueta <script>, evitando acumulación durante
+ // una jornada con muchos guardados consecutivos.
  try{
-   return await apiUnaVez(payload,12000);
+  return await apiUnaVez(payload,20000);
  }catch(e){
-   // Un único reintento. guardarParte es seguro porque conserva exactamente el mismo ID.
-   await new Promise(r=>setTimeout(r,700));
-   return await apiUnaVez(payload,18000);
+  await new Promise(r=>setTimeout(r,1200));
+  return await apiUnaVez(payload,30000);
  }
 }
 
@@ -1061,7 +1078,7 @@ function csvTrabajos(){dlcsv("resumen_trabajos.csv",["J/M","Tipo","Subtipo","Reg
 function csvZonas(){dlcsv("resumen_zonas.csv",["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],groupRows(gZona()))}
 function csvNomina(){dlcsv("resumen_nomina.csv",["Empleado","Ordinarias","Peligrosidad","Extras","Total"],nom().map(v=>[v.empleado,m(v.ord),m(v.pel),m(v.ext),m(v.ord+v.pel+v.ext)]))}
 function xlsx(){if(typeof XLSX==="undefined")return alert("No se cargó la librería Excel.");let t=totals(),wb=XLSX.utils.book_new(),aoa=XLSX.utils.aoa_to_sheet;XLSX.utils.book_append_sheet(wb,aoa([["Resumen general"],["Desde",desde.value],["Hasta",hasta.value],["Empleados",t.emp],["Ordinarias",m(t.ord)],["Peligrosidad",m(t.pel)],["Extras",m(t.ext)],["Total",m(t.ord+t.pel+t.ext)]]),"Resumen General");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Ordinarias","Peligrosidad","Extras","Total"],...nom().map(v=>[v.empleado,+m(v.ord),+m(v.pel),+m(v.ext),+m(v.ord+v.pel+v.ext)])]),"Resumen Nomina");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gEmp())]),"Por Empleado");XLSX.utils.book_append_sheet(wb,aoa([["J/M","Tipo","Subtipo","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gTrab())]),"Por Trabajo");XLSX.utils.book_append_sheet(wb,aoa([["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gZona())]),"Por Zona");XLSX.utils.book_append_sheet(wb,aoa([HEAD,...rowsR().map(det)]),"Detalle");XLSX.writeFile(wb,`informe_partes_${desde.value}_${hasta.value}.xlsx`)}
-function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.30",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
+function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.31",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
 
 desde.addEventListener("change",()=>{localStorage.desde=desde.value;loadAll()});
 hasta.addEventListener("change",()=>{localStorage.hasta=hasta.value;loadAll()});
