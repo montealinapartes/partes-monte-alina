@@ -23,7 +23,6 @@ function doPost(e) {
 }
 
 function ejecutarAccion(data) {
-  prepararHojas();
   const accion = data.accion;
   if (accion === "leerTodo") return leerTodo();
   if (accion === "guardarParte") return guardarParte(data.parte);
@@ -75,7 +74,7 @@ function asegurarHoja(ss, nombre, headers) {
 
 function leerTodo() {
   const ss = libro();
-  return { ok: true, version: "v6.10.29", empleados: leerHoja(ss, "Empleados"), partes: leerHoja(ss, "Partes") };
+  return { ok: true, version: "v6.10.32", empleados: leerHoja(ss, "Empleados"), partes: leerHoja(ss, "Partes") };
 }
 
 function leerHoja(ss, nombre) {
@@ -93,37 +92,46 @@ function leerHoja(ss, nombre) {
 
 function guardarParte(parte) {
   const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
+  lock.waitLock(15000);
   try {
-  const ss = libro();
-  const sh = ss.getSheetByName("Partes");
-  const data = sh.getDataRange().getDisplayValues();
-  const headers = data[0].map(h => String(h).trim());
-  if (!parte.ID) parte.ID = Utilities.getUuid();
-  parte.Fecha = normalizarFecha(parte.Fecha);
-  parte.Ordinarias = redondearMediaHora(parte.Ordinarias);
-  parte.Peligrosidad = redondearMediaHora(parte.Peligrosidad);
-  parte.Extras = redondearMediaHora(parte.Extras);
-  if (horasPositivas(parte.Extras)) parte.Ordinarias = "0,00";
+    const ss = libro();
+    const sh = ss.getSheetByName("Partes");
+    if (!sh) throw new Error("No existe la pestaña Partes.");
 
-  const idCol = headers.indexOf("ID");
-  if (idCol === -1) throw new Error("No se encuentra la columna ID en Partes.");
+    const lastCol = sh.getLastColumn();
+    const headers = sh.getRange(1, 1, 1, lastCol).getDisplayValues()[0]
+      .map(h => String(h).trim());
 
-  let rowIndex = -1;
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][idCol]).trim() === String(parte.ID).trim()) {
-      rowIndex = i + 1;
-      break;
+    if (!parte.ID) parte.ID = Utilities.getUuid();
+    parte.Fecha = normalizarFecha(parte.Fecha);
+    parte.Ordinarias = redondearMediaHora(parte.Ordinarias);
+    parte.Peligrosidad = redondearMediaHora(parte.Peligrosidad);
+    parte.Extras = redondearMediaHora(parte.Extras);
+    if (horasPositivas(parte.Extras)) parte.Ordinarias = "0,00";
+
+    const idCol = headers.indexOf("ID");
+    if (idCol === -1) throw new Error("No se encuentra la columna ID en Partes.");
+
+    // Buscar únicamente en la columna ID. Evita leer todos los partes de la hoja
+    // en cada guardado, que se vuelve más lento a medida que crece el histórico.
+    let rowIndex = -1;
+    const lastRow = sh.getLastRow();
+    if (lastRow > 1) {
+      const encontrado = sh.getRange(2, idCol + 1, lastRow - 1, 1)
+        .createTextFinder(String(parte.ID).trim())
+        .matchEntireCell(true)
+        .findNext();
+      if (encontrado) rowIndex = encontrado.getRow();
     }
-  }
 
-  const row = headers.map(h => parte[h] ?? "");
-  if (rowIndex > -1) {
-    sh.getRange(rowIndex, 1, 1, row.length).setValues([row]);
-  } else {
-    sh.appendRow(row);
-  }
-  return { ok: true, parte, actualizado: rowIndex > -1 };
+    const row = headers.map(h => parte[h] ?? "");
+    if (rowIndex > -1) {
+      sh.getRange(rowIndex, 1, 1, row.length).setValues([row]);
+    } else {
+      sh.getRange(lastRow + 1, 1, 1, row.length).setValues([row]);
+    }
+    SpreadsheetApp.flush();
+    return { ok: true, parte, actualizado: rowIndex > -1 };
   } finally {
     lock.releaseLock();
   }
