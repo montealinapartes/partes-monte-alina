@@ -135,15 +135,42 @@ function normalizarParte(r){
  return r;
 }
 
-function api(payload){
+function apiUnaVez(payload,timeoutMs=12000){
  return new Promise((resolve,reject)=>{
   const cb="cb_"+Date.now()+"_"+Math.random().toString(36).slice(2);
   const script=document.createElement("script");
-  window[cb]=(j)=>{delete window[cb];script.remove();if(!j.ok)reject(new Error(j.error||"Error API"));else resolve(j);};
-  script.onerror=()=>{delete window[cb];script.remove();reject(new Error("No se pudo conectar con Google Sheets"));};
-  script.src=API+"?callback="+encodeURIComponent(cb)+"&payload="+encodeURIComponent(JSON.stringify(payload));
+  let terminado=false;
+  const limpiar=()=>{
+    try{delete window[cb]}catch(_){}
+    if(script.parentNode)script.remove();
+  };
+  const timer=setTimeout(()=>{
+    if(terminado)return;
+    terminado=true; limpiar();
+    reject(new Error("La conexión con Google Sheets está tardando demasiado."));
+  },timeoutMs);
+  window[cb]=(j)=>{
+    if(terminado)return;
+    terminado=true; clearTimeout(timer); limpiar();
+    if(!j.ok)reject(new Error(j.error||"Error API"));else resolve(j);
+  };
+  script.onerror=()=>{
+    if(terminado)return;
+    terminado=true; clearTimeout(timer); limpiar();
+    reject(new Error("No se pudo conectar con Google Sheets"));
+  };
+  script.src=API+"?callback="+encodeURIComponent(cb)+"&payload="+encodeURIComponent(JSON.stringify(payload))+"&_t="+Date.now();
   document.body.appendChild(script);
  });
+}
+async function api(payload){
+ try{
+   return await apiUnaVez(payload,12000);
+ }catch(e){
+   // Un único reintento. guardarParte es seguro porque conserva exactamente el mismo ID.
+   await new Promise(r=>setTimeout(r,700));
+   return await apiUnaVez(payload,18000);
+ }
 }
 
 function init(){desde.value=localStorage.desde||month();hasta.value=localStorage.hasta||today();role();if(rol)loadAll()}
@@ -500,8 +527,9 @@ async function savePart(id){
 
   // Después de incorporar el parte confirmado, buscamos el primer trabajador pendiente.
   // Si no queda ninguno, el día está completo y avanzamos al siguiente laborable.
-  let pendiente=trabajadorPendiente(fechaGuardada);
-  let diaCompleto=pendiente==="";
+  let estados=estadoTrabajadoresDia(fechaGuardada);
+  let pendiente=(estados.find(x=>!x.completo)||{}).nombre||"";
+  let diaCompleto=estados.length>0 && estados.every(x=>x.completo);
 
   let fechaNuevo=diaCompleto?siguienteDiaLaborable(fechaGuardada):fechaGuardada;
   localStorage.ultimaFechaParte=fechaNuevo;
@@ -772,6 +800,10 @@ function empleadoEnPlantillaFecha(e,fecha){
  if(!e||!fecha)return false;
  let alta=fechaAltaEmpleado(e);
  let baja=fechaBajaEmpleado(e);
+ let activo=String(e.Activo).toUpperCase()!=="FALSE";
+ // Histórico: un empleado con FechaBaja cuenta hasta esa fecha.
+ // Si está inactivo y no tiene FechaBaja, no debe bloquear días actuales.
+ if(!activo && !baja)return false;
  return fecha>=alta && (!baja || fecha<=baja);
 }
 function empleadosActivos(){
@@ -815,8 +847,14 @@ function empleadosOrdenados(fecha){
 
  return [...base,...nuevos].map(x=>x.nombre);
 }
+function claveEmpleado(nombre){
+ return String(nombre||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+   .trim().replace(/\s+/g," ").toUpperCase();
+}
 function totalOrdinariasEmpleadoFecha(nombre,fecha,excluirId=""){
- return partesTodas.filter(p=>p.Empleado===nombre&&p.Fecha===fecha&&p.ID!==excluirId)
+ const clave=claveEmpleado(nombre);
+ return partesTodas
+   .filter(p=>claveEmpleado(p.Empleado)===clave && p.Fecha===fecha && String(p.ID)!==String(excluirId))
    .reduce((acc,p)=>acc+n(p.Ordinarias),0);
 }
 function trabajadorPendiente(fecha,excluirId=""){
@@ -1014,7 +1052,7 @@ function csvTrabajos(){dlcsv("resumen_trabajos.csv",["J/M","Tipo","Subtipo","Reg
 function csvZonas(){dlcsv("resumen_zonas.csv",["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],groupRows(gZona()))}
 function csvNomina(){dlcsv("resumen_nomina.csv",["Empleado","Ordinarias","Peligrosidad","Extras","Total"],nom().map(v=>[v.empleado,m(v.ord),m(v.pel),m(v.ext),m(v.ord+v.pel+v.ext)]))}
 function xlsx(){if(typeof XLSX==="undefined")return alert("No se cargó la librería Excel.");let t=totals(),wb=XLSX.utils.book_new(),aoa=XLSX.utils.aoa_to_sheet;XLSX.utils.book_append_sheet(wb,aoa([["Resumen general"],["Desde",desde.value],["Hasta",hasta.value],["Empleados",t.emp],["Ordinarias",m(t.ord)],["Peligrosidad",m(t.pel)],["Extras",m(t.ext)],["Total",m(t.ord+t.pel+t.ext)]]),"Resumen General");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Ordinarias","Peligrosidad","Extras","Total"],...nom().map(v=>[v.empleado,+m(v.ord),+m(v.pel),+m(v.ext),+m(v.ord+v.pel+v.ext)])]),"Resumen Nomina");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gEmp())]),"Por Empleado");XLSX.utils.book_append_sheet(wb,aoa([["J/M","Tipo","Subtipo","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gTrab())]),"Por Trabajo");XLSX.utils.book_append_sheet(wb,aoa([["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gZona())]),"Por Zona");XLSX.utils.book_append_sheet(wb,aoa([HEAD,...rowsR().map(det)]),"Detalle");XLSX.writeFile(wb,`informe_partes_${desde.value}_${hasta.value}.xlsx`)}
-function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.26",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
+function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.27",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
 
 desde.addEventListener("change",()=>{localStorage.desde=desde.value;loadAll()});
 hasta.addEventListener("change",()=>{localStorage.hasta=hasta.value;loadAll()});

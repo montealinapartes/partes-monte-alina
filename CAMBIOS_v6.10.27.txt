@@ -1,0 +1,7 @@
+PARTES MONTE ALINA v6.10.27
+- Mantiene la protección anti-duplicados de v6.10.26.
+- Si Google Sheets tarda, la llamada tiene tiempo límite y un único reintento seguro con el mismo ID.
+- La comprobación de fin de día normaliza los nombres (espacios, mayúsculas y acentos).
+- Un empleado marcado inactivo sin FechaBaja ya no bloquea el cierre del día.
+- El salto de día se decide con el estado completo de todos los trabajadores aplicables a esa fecha.
+- No tocar Android hasta verificar esta versión en PC.
