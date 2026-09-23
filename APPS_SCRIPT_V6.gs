@@ -75,7 +75,7 @@ function asegurarHoja(ss, nombre, headers) {
 
 function leerTodo() {
   const ss = libro();
-  return { ok: true, version: "v6.10.33", empleados: leerHoja(ss, "Empleados"), partes: leerHoja(ss, "Partes") };
+  return { ok: true, version: "v6.10.34", empleados: leerHoja(ss, "Empleados"), partes: leerHoja(ss, "Partes") };
 }
 
 function leerHoja(ss, nombre) {
