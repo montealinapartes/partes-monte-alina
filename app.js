@@ -726,8 +726,8 @@ async function delRow(id){
  partes=partes.filter(x=>x.ID!==id);
  partesTodas=partesTodas.filter(x=>x.ID!==id);
  if(editingId===id)editingId=null;
- setBusy(false,confirmacionPendiente?"Eliminación enviada":"Parte eliminado");
- msg("loginMsg",confirmacionPendiente?"Eliminación enviada a Google Sheets. Confirmación pendiente.":"Parte eliminado.",true);
+ setBusy(false,"Parte eliminado");
+ msg("loginMsg","Parte eliminado.",true);
  render();
 }
 
