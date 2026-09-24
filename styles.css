@@ -33,3 +33,10 @@ button:disabled{opacity:.5;cursor:not-allowed}.secondary{background:#fff;color:#
 .parteCard .row input{min-width:180px}.secondary{white-space:nowrap}
 
 #progresoDia{margin:12px 0}
+
+.modoPartes{display:flex;gap:12px;flex-wrap:wrap}
+.modoPartes .big{min-width:260px}
+.extraCabecera{display:flex;justify-content:space-between;gap:12px;align-items:center;background:#f8fafc;border:1px solid #cbd5e1;border-radius:14px;padding:14px;margin-bottom:14px;font-size:20px}
+.extraCabecera span{font-weight:700}
+.extraActions button{min-width:260px}
+@media(max-width:900px){.modoPartes .big,.extraActions button{width:100%;min-width:0}.extraCabecera{align-items:flex-start;flex-direction:column}}

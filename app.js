@@ -31,6 +31,7 @@ const SITS=["Trabajo","Baja","Vacaciones","Moscoso","Cursos","Hospitalización f
 const ZONAS={"A) COMUNES": ["01 Entrada", "02 Oficina de Gerencia/Administración", "03 Caseta de Vigilancia", "04 Sala de los vigilantes/conserjes", "05 Instalaciones mantenimiento/jardinería. Sólo almacén y cuartos mto-jardinería", "06 Depuradoras 1, 2 y3", "07 Parcela depósitos y grupo de presión+Pozos 1-4", "08 Parcela de la Central Térmica", "10 Pistas tenis y padel", "27 TODA LA URBANIZACIÓN"], "B) FASE I": ["11 Vial y mediana Avenida hasta transversal siete y transversal 1-7", "12 Vial Saliente hasta el 56", "13 Vial Poniente hasta el 76", "14 Zona verde Saliente", "15 Zona tira verde entre Transversal 2 y 3", "16 Zona H entre transversal 4 y 5 y tros Avda. 42", "17 Zona verde transversal 6", "18 Zona paso de la viga Monteclaro", "19 Instalación Central Térmica", "19 Bis Toda la fase I"], "C) FASE II": ["20 Vial y mediana Avda. desde Transv. 7 a 8", "21 Vial saliente desde el 64 hasta 124", "22 Vial Poniente desde el 78 al 188", "23 Plazas 1 a la 9 Zona Levitt", "24 Pasillo verde e intersticiales", "25 Rotonda Transversal Ocho", "26 Bosque de Boadilla", "26 Bis Toda la fase II"]};
 const TRAB={"Mantenimiento": {"01. Distribución, control y revision de los trabajos": ["A. Revisión, control y distribución de los trabajos"], "02. Red de agua": ["F. Inspección red agua y detección fugas de agua", "G. Reparación fugas de agua en red agua", "GGBis. Obra nueva acometida agua", "H. Control y supervisión de los pozos, depósitos, etc.", "I. Reparación armarios de agua, limpieza filtros, etc.", "K. Revisión y lectura contadores de agua"], "03. Electricidad": ["L. Cambio de bombillas del alumbrado público", "M. Pequeñas reparaciones, arreglo y pintura farolas", "N. Colaboración con empresa electricidad"], "04. Red de saneamiento": ["O. Inspección de la red de saneamiento y detección de atascos", "P. Limpieza y reparación de arquetas y rejillas", "Q. Supervisión y colaboración con servicio limpieza y desatranco"], "05. Desinsectación y desratización": ["R. Inspección y control de posibles plagas", "S. Acompañamiento y supervisión empresa plagas"], "06. Limpieza": ["T. Limpieza viales y aceras", "U. Limpieza plazas", "V. Limpieza jardinería"], "07. Pintura": ["Y. Pintura Señalización y vallados", "Z. Pintura instalaciones de la Comunidad"], "08. Reparación baches": ["AA. Reparación pequeños baches", "BB. Zanjas abiertas para la reparación de averias", "Bbbis. Reparación de aceras sin avería previa"], "09. Protección contraincendios": ["CC. Mantenimiento extintores", "DD. Mantenimiento bocas de incendio"], "10. Mantenimiento maquinaria, herramienta y vehículos": ["Mantenimiento herramienta, maquinaria y vehículos"], "11. Inspección herramientas": ["EE. Reparación vallados", "FF. Otras reparaciones", "FFbis. Reparaciones instalaciones Comunidad"], "12. Limpieza y poda temporal nieve": ["TT. Limpieza y poda temporal nieve"]}, "Jardinería": {"1. Riego": ["Riego"], "2. Siega": ["Siega"], "3. Desbroce": ["desbroce"], "4. Entrecavado/rastrillado": ["Entrecavado/rastrillado/recorte/perfilado"], "5. Poda": ["Poda"], "6. Plantaciones": ["Plantaciones"], "7. Jabalies": ["Jabalíes"], "8. Tratamientos fitosanitarios": ["Tratamientos fitosanitarios"], "9. Mantenimiento maquinaria jardineria": ["Mantenimiento maquinaria, herramienta y accesorios jard."]}};
 let emps=[], partes=[], partesTodas=[], rol=localStorage.rol||"", busy=false, editingId=null, partesSubtab="editando";
+let modoParte="ordinario", extraBorrador=null;
 const guardadosEnCurso=new Set();
 
 function today(){return new Date().toISOString().slice(0,10)}
@@ -331,6 +332,141 @@ async function reactivarEmpleado(id){
 }
 
 async function delEmp(id){if(!isAdmin())return;if(!confirm("¿Eliminar empleado?"))return;try{setBusy(true,"Eliminando empleado...");await api({accion:"eliminarEmpleado",id});await loadAll();}catch(e){setBusy(false,"Error");msg("loginMsg",e.message,false)}}
+
+
+function cambiarModoParte(modo){
+ modoParte=modo==="extra"?"extra":"ordinario";
+ document.getElementById("modoOrdinario").classList.toggle("hidden",modoParte!=="ordinario");
+ document.getElementById("modoExtra").classList.toggle("hidden",modoParte!=="extra");
+ document.getElementById("btnModoOrdinario").className="big "+(modoParte==="ordinario"?"active":"secondary");
+ document.getElementById("btnModoExtra").className="big "+(modoParte==="extra"?"active":"secondary");
+ if(modoParte==="extra"){
+   if(!extraBorrador) nuevoExtraBorrador();
+   renderExtraEditor();
+ }
+}
+function nuevoExtraBorrador(fecha,empleado){
+ let f=fecha || localStorage.ultimaFechaExtra || today();
+ let nombres=empleadosOrdenados(f);
+ extraBorrador={
+   ID:"tmp_extra_"+Date.now()+"_"+Math.random().toString(36).slice(2),
+   Fecha:f, Empleado:empleado || localStorage.ultimoEmpleadoExtra || nombres[0] || "",
+   Situacion:"Trabajo", TipoZona:"", Zona:"", JM:"", TipoTrabajo:"", SubtipoTrabajo:"",
+   Ordinarias:0, Peligrosidad:"", Extras:"", _dirty:true, _new:true
+ };
+ return extraBorrador;
+}
+function empleadoNoDisponibleParaExtras(nombre,fecha){
+ const clave=claveEmpleado(nombre);
+ return partesTodas.find(p=>p.Fecha===fecha && claveEmpleado(p.Empleado)===clave && p.Situacion && p.Situacion!=="Trabajo");
+}
+function editExtra(campo,valor){
+ if(!extraBorrador)return;
+ if(["Ordinarias","Peligrosidad","Extras"].includes(campo)) valor=redondearMediaHora(valor);
+ if(campo==="Empleado"){
+   extraBorrador.Empleado=valor;
+   localStorage.ultimoEmpleadoExtra=valor;
+ }else extraBorrador[campo]=valor;
+ if(campo==="Fecha" && valor)localStorage.ultimaFechaExtra=valor;
+ if(campo==="JM"){extraBorrador.TipoTrabajo="";extraBorrador.SubtipoTrabajo="";}
+ if(campo==="TipoTrabajo"){extraBorrador.SubtipoTrabajo="";aplicarSubtipoAutomatico(extraBorrador);}
+ if(campo==="TipoZona")extraBorrador.Zona="";
+ extraBorrador.Situacion="Trabajo";
+ extraBorrador.Ordinarias=0;
+ renderExtraEditor();
+}
+function setFechaExtraParte(part,val){
+ if(!extraBorrador)return;
+ let fp=fechaParts(extraBorrador.Fecha);
+ if(part==="d")fp.d=String(val).padStart(2,"0");
+ if(part==="m")fp.m=String(val).padStart(2,"0");
+ if(part==="y")fp.y=String(val);
+ editExtra("Fecha",`${fp.y}-${fp.m}-${fp.d}`);
+}
+function moverFechaExtra(dias){ if(extraBorrador) editExtra("Fecha",addDays(extraBorrador.Fecha||today(),dias)); }
+
+function validarExtra(p){
+ if(!p.Fecha)return "Fecha obligatoria";
+ if(!p.Empleado)return "Empleado obligatorio";
+ let noTrabajo=empleadoNoDisponibleParaExtras(p.Empleado,p.Fecha);
+ if(noTrabajo)return `${p.Empleado} figura como ${noTrabajo.Situacion} el ${p.Fecha}. No se pueden introducir horas extras.`;
+ if(!p.TipoZona)return "Tipo zona obligatorio";
+ if(!p.Zona)return "Zona obligatoria";
+ if(!p.JM)return "Jardinería/Mantenimiento obligatorio";
+ if(!p.TipoTrabajo)return "Tipo trabajo obligatorio";
+ aplicarSubtipoAutomatico(p);
+ if(!p.SubtipoTrabajo)return "Subtipo trabajo obligatorio";
+ if(p.Extras===""||isNaN(n(p.Extras))||n(p.Extras)<=0)return "Las horas extras deben ser mayores que 0";
+ return "";
+}
+async function guardarExtra(accion){
+ if(!extraBorrador)return;
+ let p=extraBorrador;
+ let err=validarExtra(p); if(err)return alert(err);
+ if(guardadosEnCurso.has(p.ID))return;
+ if(!p._saveId)p._saveId=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():"extra_"+Date.now()+"_"+Math.random().toString(36).slice(2);
+ let payload=Object.assign({},p,{ID:p._saveId,Situacion:"Trabajo",Ordinarias:0,Peligrosidad:0});
+ delete payload._dirty; delete payload._new; delete payload._saveId;
+ guardadosEnCurso.add(p.ID);
+ try{
+   setBusy(true,"Guardando horas extras...");
+   let res;
+   try{res=await apiUnaVez({accion:"guardarParte",parte:payload},30000);}
+   catch(e){res={ok:true,parte:payload,confirmacionPendiente:true};}
+   let guardado=actualizarParteLocal(Object.assign({},payload,res.parte||{}));
+   let empleado=guardado.Empleado, fecha=guardado.Fecha;
+   localStorage.ultimoEmpleadoExtra=empleado;
+   if(accion==="misma"){
+     nuevoExtraBorrador(fecha,empleado);
+     setBusy(false,"Extras guardadas");
+     msg("loginMsg","Horas extras guardadas. Nuevo parte para la misma fecha.",true);
+   }else{
+     localStorage.ultimaFechaExtra=fecha;
+     nuevoExtraBorrador(fecha,empleado);
+     setBusy(false,"Extras guardadas");
+     msg("loginMsg","Horas extras guardadas. Se mantiene el empleado. Selecciona la fecha del siguiente parte extra.",true);
+   }
+   render();
+ }catch(e){
+   setBusy(false,"Error"); msg("loginMsg",e.message,false);
+ }finally{guardadosEnCurso.delete(p.ID);}
+}
+function renderExtraEditor(){
+ let c=document.getElementById("extraEditor"); if(!c)return;
+ if(!extraBorrador)nuevoExtraBorrador();
+ let p=extraBorrador;
+ p.Situacion="Trabajo"; p.Ordinarias=0;
+ aplicarSubtipoAutomatico(p);
+ let names=empleadosOrdenados(p.Fecha);
+ let zs=p.TipoZona?(ZONAS[p.TipoZona]||[]):[];
+ let ts=p.JM?Object.keys(TRAB[p.JM]||{}):[];
+ let ss=p.JM&&p.TipoTrabajo?(TRAB[p.JM][p.TipoTrabajo]||[]):[];
+ let fp=fechaParts(p.Fecha);
+ let noTrabajo=empleadoNoDisponibleParaExtras(p.Empleado,p.Fecha);
+ c.innerHTML=`<div class="extraCabecera"><b>${esc(p.Empleado||"Selecciona empleado")}</b><span>${esc(p.Fecha)}</span></div>
+ ${noTrabajo?`<div class="err">${esc(p.Empleado)} figura como ${esc(noTrabajo.Situacion)} en esta fecha. No se pueden guardar extras.</div>`:""}
+ <div class="formGrid">
+  <div class="field"><label>Empleado</label><select onchange="editExtra('Empleado',this.value)">${opt(names,p.Empleado,"Empleado")}</select></div>
+  <div class="field"><label>Fecha</label><div class="fechaGrid">
+   <select onchange="setFechaExtraParte('d',this.value)">${numOptions(31,fp.d)}</select>
+   <select onchange="setFechaExtraParte('m',this.value)">${numOptions(12,fp.m)}</select>
+   <select onchange="setFechaExtraParte('y',this.value)">${yearOptions(fp.y)}</select>
+  </div><div class="fechaBtns"><button type="button" class="secondary" onclick="moverFechaExtra(-1)">← Día anterior</button><button type="button" class="secondary" onclick="moverFechaExtra(1)">Día siguiente →</button></div></div>
+  <div class="field"><label>Situación</label><input value="Trabajo" readonly></div>
+  <div class="field"><label>Tipo zona</label><select onchange="editExtra('TipoZona',this.value)">${opt(Object.keys(ZONAS),p.TipoZona,"Tipo zona")}</select></div>
+  <div class="field"><label>Zona</label><select onchange="editExtra('Zona',this.value)">${opt(zs,p.Zona,"Zona")}</select></div>
+  <div class="field"><label>Jardinería / Mantenimiento</label><select onchange="editExtra('JM',this.value)">${opt(["Jardinería","Mantenimiento"],p.JM,"J/M")}</select></div>
+  <div class="field"><label>Tipo trabajo</label><select onchange="editExtra('TipoTrabajo',this.value)">${opt(ts,p.TipoTrabajo,"Tipo")}</select></div>
+  ${ss.length===1?`<div class="field"><label>Subtipo trabajo</label><input value="${esc(ss[0])}" readonly></div>`:`<div class="field"><label>Subtipo trabajo</label><select onchange="editExtra('SubtipoTrabajo',this.value)">${opt(ss,p.SubtipoTrabajo,"Subtipo")}</select></div>`}
+  <div class="hoursGrid">
+   <div class="field"><label>Horas extras</label><input type="text" inputmode="decimal" value="${p.Extras!==""?mcoma(p.Extras):""}" onchange="editExtra('Extras',this.value)"></div>
+  </div>
+ </div>
+ <div class="actions extraActions">
+  <button onclick="guardarExtra('misma')">Guardar y otro parte en esta fecha</button>
+  <button onclick="guardarExtra('siguiente')">Guardar y otro día</button>
+ </div>`;
+}
 
 function nuevoParteBlanco(fecha){
  let tmp="tmp_"+Date.now()+"_"+Math.random().toString(36).slice(2);
@@ -953,6 +1089,7 @@ function render(){
  savedCards.innerHTML=partes.length?partes.map((r,i)=>cardHtml(r,i,names,true)).join(""):"<p class='muted'>No hay partes guardados en el rango seleccionado.</p>";
 
  dashRender();nominaRender();valRender();renderProgresoDia();renderRevisionExtras();renderProgresoDia();renderRevisionOrdinarias();renderProgresoDia();
+ if(modoParte==="extra")renderExtraEditor();
 }
 function cardHtml(r,i,names,compact=false){
  aplicarReglaSituacion(r);
@@ -1070,7 +1207,7 @@ function csvTrabajos(){dlcsv("resumen_trabajos.csv",["J/M","Tipo","Subtipo","Reg
 function csvZonas(){dlcsv("resumen_zonas.csv",["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],groupRows(gZona()))}
 function csvNomina(){dlcsv("resumen_nomina.csv",["Empleado","Ordinarias","Peligrosidad","Extras","Total"],nom().map(v=>[v.empleado,m(v.ord),m(v.pel),m(v.ext),m(v.ord+v.pel+v.ext)]))}
 function xlsx(){if(typeof XLSX==="undefined")return alert("No se cargó la librería Excel.");let t=totals(),wb=XLSX.utils.book_new(),aoa=XLSX.utils.aoa_to_sheet;XLSX.utils.book_append_sheet(wb,aoa([["Resumen general"],["Desde",desde.value],["Hasta",hasta.value],["Empleados",t.emp],["Ordinarias",m(t.ord)],["Peligrosidad",m(t.pel)],["Extras",m(t.ext)],["Total",m(t.ord+t.pel+t.ext)]]),"Resumen General");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Ordinarias","Peligrosidad","Extras","Total"],...nom().map(v=>[v.empleado,+m(v.ord),+m(v.pel),+m(v.ext),+m(v.ord+v.pel+v.ext)])]),"Resumen Nomina");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gEmp())]),"Por Empleado");XLSX.utils.book_append_sheet(wb,aoa([["J/M","Tipo","Subtipo","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gTrab())]),"Por Trabajo");XLSX.utils.book_append_sheet(wb,aoa([["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gZona())]),"Por Zona");XLSX.utils.book_append_sheet(wb,aoa([HEAD,...rowsR().map(det)]),"Detalle");XLSX.writeFile(wb,`informe_partes_${desde.value}_${hasta.value}.xlsx`)}
-function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.34",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
+function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.35.1",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
 
 desde.addEventListener("change",()=>{localStorage.desde=desde.value;loadAll()});
 hasta.addEventListener("change",()=>{localStorage.hasta=hasta.value;loadAll()});

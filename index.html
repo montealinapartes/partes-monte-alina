@@ -60,6 +60,14 @@
 
 <section id="partes">
   <section class="card">
+    <div class="modoPartes">
+      <button id="btnModoOrdinario" class="big active" onclick="cambiarModoParte('ordinario')">Ordinarias y peligrosidad</button>
+      <button id="btnModoExtra" class="big secondary" onclick="cambiarModoParte('extra')">Horas extraordinarias</button>
+    </div>
+  </section>
+
+  <div id="modoOrdinario">
+  <section class="card">
     <div class="tabs subTabs">
       <button id="tabEditando" class="active" onclick="subtabPartes('editando',this)">Parte en edición</button>
       <button id="tabGuardados" onclick="subtabPartes('guardados',this)">Partes ya rellenos</button>
@@ -81,6 +89,15 @@
     <h2>Partes ya rellenos</h2>
     <div id="savedCards" class="partesGrid"></div>
   </section>
+  </div>
+
+  <div id="modoExtra" class="hidden">
+    <section class="card">
+      <h2>Horas extraordinarias</h2>
+      <p class="muted">Selecciona un empleado. Se mantiene fijo mientras avanzas por las fechas. Situación = Trabajo. En este modo solo se introducen las horas extraordinarias.</p>
+      <div id="extraEditor"></div>
+    </section>
+  </div>
 </section>
 
 <section id="dash" class="hidden">
