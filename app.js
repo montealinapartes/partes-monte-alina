@@ -399,7 +399,7 @@ function validarExtra(p){
  if(p.Extras===""||isNaN(n(p.Extras))||n(p.Extras)<=0)return "Las horas extras deben ser mayores que 0";
  return "";
 }
-async function guardarExtra(accion){
+async function guardarExtra(){
  if(!extraBorrador)return;
  let p=extraBorrador;
  let err=validarExtra(p); if(err)return alert(err);
@@ -416,16 +416,10 @@ async function guardarExtra(accion){
    let guardado=actualizarParteLocal(Object.assign({},payload,res.parte||{}));
    let empleado=guardado.Empleado, fecha=guardado.Fecha;
    localStorage.ultimoEmpleadoExtra=empleado;
-   if(accion==="misma"){
-     nuevoExtraBorrador(fecha,empleado);
-     setBusy(false,"Extras guardadas");
-     msg("loginMsg","Horas extras guardadas. Nuevo parte para la misma fecha.",true);
-   }else{
-     localStorage.ultimaFechaExtra=fecha;
-     nuevoExtraBorrador(fecha,empleado);
-     setBusy(false,"Extras guardadas");
-     msg("loginMsg","Horas extras guardadas. Se mantiene el empleado. Selecciona la fecha del siguiente parte extra.",true);
-   }
+   localStorage.ultimaFechaExtra=fecha;
+   nuevoExtraBorrador(fecha,empleado);
+   setBusy(false,"Extras guardadas");
+   msg("loginMsg","Horas extras guardadas. Nuevo parte preparado con el mismo empleado y fecha.",true);
    render();
  }catch(e){
    setBusy(false,"Error"); msg("loginMsg",e.message,false);
@@ -463,8 +457,7 @@ function renderExtraEditor(){
   </div>
  </div>
  <div class="actions extraActions">
-  <button onclick="guardarExtra('misma')">Guardar y otro parte en esta fecha</button>
-  <button onclick="guardarExtra('siguiente')">Guardar y otro día</button>
+  <button onclick="guardarExtra()">Guardar y nuevo parte</button>
  </div>`;
 }
 
@@ -1207,7 +1200,7 @@ function csvTrabajos(){dlcsv("resumen_trabajos.csv",["J/M","Tipo","Subtipo","Reg
 function csvZonas(){dlcsv("resumen_zonas.csv",["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],groupRows(gZona()))}
 function csvNomina(){dlcsv("resumen_nomina.csv",["Empleado","Ordinarias","Peligrosidad","Extras","Total"],nom().map(v=>[v.empleado,m(v.ord),m(v.pel),m(v.ext),m(v.ord+v.pel+v.ext)]))}
 function xlsx(){if(typeof XLSX==="undefined")return alert("No se cargó la librería Excel.");let t=totals(),wb=XLSX.utils.book_new(),aoa=XLSX.utils.aoa_to_sheet;XLSX.utils.book_append_sheet(wb,aoa([["Resumen general"],["Desde",desde.value],["Hasta",hasta.value],["Empleados",t.emp],["Ordinarias",m(t.ord)],["Peligrosidad",m(t.pel)],["Extras",m(t.ext)],["Total",m(t.ord+t.pel+t.ext)]]),"Resumen General");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Ordinarias","Peligrosidad","Extras","Total"],...nom().map(v=>[v.empleado,+m(v.ord),+m(v.pel),+m(v.ext),+m(v.ord+v.pel+v.ext)])]),"Resumen Nomina");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gEmp())]),"Por Empleado");XLSX.utils.book_append_sheet(wb,aoa([["J/M","Tipo","Subtipo","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gTrab())]),"Por Trabajo");XLSX.utils.book_append_sheet(wb,aoa([["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gZona())]),"Por Zona");XLSX.utils.book_append_sheet(wb,aoa([HEAD,...rowsR().map(det)]),"Detalle");XLSX.writeFile(wb,`informe_partes_${desde.value}_${hasta.value}.xlsx`)}
-function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.35.1",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
+function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.35.2",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
 
 desde.addEventListener("change",()=>{localStorage.desde=desde.value;loadAll()});
 hasta.addEventListener("change",()=>{localStorage.hasta=hasta.value;loadAll()});
