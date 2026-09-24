@@ -712,7 +712,23 @@ async function delRow(id){
  if(!confirm("¿Eliminar este parte?"))return;
  let p=partes.find(x=>x.ID===id); if(!p)return;
  if(String(id).startsWith("tmp_")){partes=partes.filter(x=>x.ID!==id);if(editingId===id)editingId=null;render();return;}
- try{setBusy(true,"Eliminando parte...");await api({accion:"eliminarParte",id});partes=partes.filter(x=>x.ID!==id);if(editingId===id)editingId=null;setBusy(false,"Parte eliminado");render();}catch(e){setBusy(false,"Error");msg("loginMsg",e.message,false)}
+ setBusy(true,"Eliminando parte...");
+ let confirmacionPendiente=false;
+ try{
+  // Una sola petición: no reintentamos eliminar el mismo ID si se pierde la respuesta JSONP.
+  await apiUnaVez({accion:"eliminarParte",id},30000);
+ }catch(e){
+  // En producción hemos comprobado que el borrado puede llegar a Sheets aunque la
+  // confirmación no vuelva al navegador. "Parte no encontrado" también equivale al
+  // estado final deseado después de solicitar la eliminación de este ID.
+  confirmacionPendiente=true;
+ }
+ partes=partes.filter(x=>x.ID!==id);
+ partesTodas=partesTodas.filter(x=>x.ID!==id);
+ if(editingId===id)editingId=null;
+ setBusy(false,confirmacionPendiente?"Eliminación enviada":"Parte eliminado");
+ msg("loginMsg",confirmacionPendiente?"Eliminación enviada a Google Sheets. Confirmación pendiente.":"Parte eliminado.",true);
+ render();
 }
 
 function opt(a,val,ph=""){return (ph?`<option value="">${ph}</option>`:"")+a.map(x=>`<option value="${esc(x)}" ${x===val?"selected":""}>${esc(x)}</option>`).join("")}
@@ -1200,7 +1216,7 @@ function csvTrabajos(){dlcsv("resumen_trabajos.csv",["J/M","Tipo","Subtipo","Reg
 function csvZonas(){dlcsv("resumen_zonas.csv",["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],groupRows(gZona()))}
 function csvNomina(){dlcsv("resumen_nomina.csv",["Empleado","Ordinarias","Peligrosidad","Extras","Total"],nom().map(v=>[v.empleado,m(v.ord),m(v.pel),m(v.ext),m(v.ord+v.pel+v.ext)]))}
 function xlsx(){if(typeof XLSX==="undefined")return alert("No se cargó la librería Excel.");let t=totals(),wb=XLSX.utils.book_new(),aoa=XLSX.utils.aoa_to_sheet;XLSX.utils.book_append_sheet(wb,aoa([["Resumen general"],["Desde",desde.value],["Hasta",hasta.value],["Empleados",t.emp],["Ordinarias",m(t.ord)],["Peligrosidad",m(t.pel)],["Extras",m(t.ext)],["Total",m(t.ord+t.pel+t.ext)]]),"Resumen General");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Ordinarias","Peligrosidad","Extras","Total"],...nom().map(v=>[v.empleado,+m(v.ord),+m(v.pel),+m(v.ext),+m(v.ord+v.pel+v.ext)])]),"Resumen Nomina");XLSX.utils.book_append_sheet(wb,aoa([["Empleado","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gEmp())]),"Por Empleado");XLSX.utils.book_append_sheet(wb,aoa([["J/M","Tipo","Subtipo","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gTrab())]),"Por Trabajo");XLSX.utils.book_append_sheet(wb,aoa([["Tipo zona","Zona","Registros","Ordinarias","Peligrosidad","Extras","Total"],...groupRows(gZona())]),"Por Zona");XLSX.utils.book_append_sheet(wb,aoa([HEAD,...rowsR().map(det)]),"Detalle");XLSX.writeFile(wb,`informe_partes_${desde.value}_${hasta.value}.xlsx`)}
-function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.35.2",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
+function backup(){let blob=new Blob([JSON.stringify({version:"v6.10.35.3",fecha:new Date().toISOString(),empleados:emps,partes},null,2)],{type:"application/json"});let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="copia_seguridad_partes.json";a.click();URL.revokeObjectURL(u);msg("bakMsg","Copia exportada.",true)}
 
 desde.addEventListener("change",()=>{localStorage.desde=desde.value;loadAll()});
 hasta.addEventListener("change",()=>{localStorage.hasta=hasta.value;loadAll()});
